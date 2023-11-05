@@ -1,13 +1,15 @@
+use prost::Message;
 use std::io;
 use std::io::prelude::*;
 use std::io::Cursor;
-use prost::Message;
 
 pub mod plugin {
     include!(concat!(env!("OUT_DIR"), "/plugin.rs"));
 }
 
-pub fn deserialize_codegen_request(buf: &[u8]) -> Result<plugin::CodeGenRequest, prost::DecodeError> {
+pub fn deserialize_codegen_request(
+    buf: &[u8],
+) -> Result<plugin::CodeGenRequest, prost::DecodeError> {
     plugin::CodeGenRequest::decode(&mut Cursor::new(buf))
 }
 
@@ -19,10 +21,14 @@ pub fn serialize_codegen_response(resp: &plugin::CodeGenResponse) -> Vec<u8> {
     buf
 }
 
-pub fn create_codegen_response() -> plugin::CodeGenResponse {
+pub fn create_codegen_response(
+    request_deserialized_result: plugin::CodeGenRequest,
+) -> plugin::CodeGenResponse {
     let mut file = plugin::File::default();
     file.name = "hello.txt".to_string();
-    file.contents = "Hello World".as_bytes().to_vec();
+    file.contents = format!("{:#?}", request_deserialized_result)
+        .as_bytes()
+        .to_vec();
 
     let mut resp = plugin::CodeGenResponse::default();
     resp.files.push(file);
@@ -34,12 +40,12 @@ fn main() -> Result<(), prost::DecodeError> {
     let mut stdin = stdin.lock();
     let buffer = stdin.fill_buf().unwrap();
 
-    let _ = match deserialize_codegen_request(&buffer) {
+    let request_deserialized_result = match deserialize_codegen_request(&buffer) {
         Ok(request_deserialized_result) => request_deserialized_result,
         Err(_e) => std::process::exit(1),
     };
 
-    let resp = create_codegen_response();
+    let resp = create_codegen_response(request_deserialized_result);
     let out = serialize_codegen_response(&resp);
 
     let _ = match io::stdout().write_all(&out) {
